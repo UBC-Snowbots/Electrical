@@ -133,39 +133,45 @@ int main(void)
 	  uint16_t crr = magnitude * 10;
 
 	  switch (motor_id) {
-	  	  //Left side: timer 1
+	  	  //Left side (0-2): timer 1
 
 		  case 0: //Front Left
 			  HAL_GPIO_WritePin (GPIOC, GPIO_PIN_0, is_backwards ? 0 : 1);
 			  HAL_GPIO_WritePin (GPIOC, GPIO_PIN_1, is_backwards ? 1 : 0);
 			  HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, ccr);
+			  break;
 
 		  case 1: //Mid Left
 			  HAL_GPIO_WritePin (GPIOC, GPIO_PIN_2, is_backwards ? 0 : 1);
 			  HAL_GPIO_WritePin (GPIOC, GPIO_PIN_3, is_backwards ? 1 : 0);
 			  HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, ccr);
+			  break;
 
 		  case 2: //Back Left
 			  HAL_GPIO_WritePin (GPIOC, GPIO_PIN_4, is_backwards ? 0 : 1);
 			  HAL_GPIO_WritePin (GPIOC, GPIO_PIN_5, is_backwards ? 1 : 0);
 			  HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, ccr);
+			  break;
 
-		  //Right side: timer 3
+		  //Right side (3-5): timer 3
 
 		  case 3: //Front Right
 			  HAL_GPIO_WritePin (GPIOC, GPIO_PIN_6, is_backwards ? 0 : 1);
 			  HAL_GPIO_WritePin (GPIOC, GPIO_PIN_7, is_backwards ? 1 : 0);
 			  HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, ccr);
+			  break;
 
 		  case 4: //Mid Right
 			  HAL_GPIO_WritePin (GPIOC, GPIO_PIN_8, is_backwards ? 0 : 1);
 			  HAL_GPIO_WritePin (GPIOC, GPIO_PIN_9, is_backwards ? 1 : 0);
 			  HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, ccr);
+			  break;
 
 		  case 5: // Back Right
 			  HAL_GPIO_WritePin (GPIOC, GPIO_PIN_10, is_backwards ? 0 : 1);
 			  HAL_GPIO_WritePin (GPIOC, GPIO_PIN_11, is_backwards ? 1 : 0);
 			  HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, ccr);
+			  break;
 	  }
   }
 
@@ -181,7 +187,7 @@ int main(void)
 
 		  if (data_start && data_end){
 			  //Replace end bracket with null terminator to use string.h functions
-			  *data_end = '\0';
+			  *cmd_end = '\0';
 
 			  char motor_id_cmd = strtok(cmd_start + 1, ','); //Get motor id from command
 			  char motor_speed_cmd = strtok(NULL, ','); //Get speed setting from command
@@ -189,16 +195,29 @@ int main(void)
 			  if(motor_id_cmd && motor_speed_cmd){
 				  int speed = atoi(motor_speed_cmd); //Handle '-' sign from motor speed command
 
-				  //Command for all motors
-				  if (motor_speed_cmd[0] == 'A'){
+				  switch(motor_id_cmd[0])
+
+				  case 'L': //Left side
+					  for (int i = 0; i < 3; i++){
+						  update_motor(i, speed);
+					  }
+					  break;
+
+				  case 'R': //Right side
+					  for(int i = 3; i < 6; i++){
+						  update_motor(i, speed);
+					  }
+					  break;
+
+				  case 'A': //All motors
 					  for ( int i = 0; i < 6; i++){
 						  update_motor(i, speed);
 					  }
-				  }
-				  //Individual motor commands
-				  else{
+					  break;
+
+				  default: //Individual motor 0 - 5
 					  update_motor( atoi(motor_id_cmd), speed);
-				  }
+					  break;
 			  }
 		  }
 	  }
