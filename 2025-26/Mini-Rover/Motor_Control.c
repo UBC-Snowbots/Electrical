@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <ctype.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -112,10 +113,7 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-	  if (msg_ready){
-		  serial_processing(rx_buffer); //Parse the command and update motors
-		  msg_ready = 0; //Reset the message
-	  }
+
     /* USER CODE BEGIN 3 */
   }
 
@@ -123,8 +121,6 @@ int main(void)
 	  uint16_t is_backwards = (speed < 0); //Check for negative speed command
 	  uint32_t magnitude = abs(speed);
 	  uint8_t motor_id = index;
-
-	  if (magnitude >= 100) magnitude = 100; //Cap the speed at 100
 
 	  // Duty Cycle = CRR / (ARR + 1)
 	  //CRR = magnitude * (ARR + 1) / 100
@@ -176,6 +172,9 @@ int main(void)
   }
 
   void serial_processing (char *buffer){
+	  //Example command: $set_speed(3,76)\n\r\0
+	  //Set motor 3 to 76%
+
 	  //Check start character
 	  if (buffer[0] != '$') return;
 
@@ -192,8 +191,11 @@ int main(void)
 			  char motor_id_cmd = strtok(cmd_start + 1, ','); //Get motor id from command
 			  char motor_speed_cmd = strtok(NULL, ','); //Get speed setting from command
 
-			  if(motor_id_cmd && motor_speed_cmd){
+			  if (!motor_id_cmd || !motor_speed_cmd) return;
+
+			  if(motor_id_cmd  && motor_speed_cmd){
 				  int speed = atoi(motor_speed_cmd); //Handle '-' sign from motor speed command
+				  if (speed > 100 || speed < -100) return; //Handle invalid speeds
 
 				  switch(motor_id_cmd[0])
 
@@ -216,7 +218,11 @@ int main(void)
 					  break;
 
 				  default: //Individual motor 0 - 5
-					  update_motor( atoi(motor_id_cmd), speed);
+					  int motor_id = atoi(motor_id_cmd);
+					  if (motor_id > 5 || motor_id < 0) return; //Reject invalid Motor IDs
+					  else{
+						  update_motor(motor_id, speed);
+					  }
 					  break;
 			  }
 		  }
@@ -392,9 +398,9 @@ static void MX_TIM3_Init(void)
 
   /* USER CODE END TIM3_Init 1 */
   htim3.Instance = TIM3;
-  htim3.Init.Prescaler = 0;
+  htim3.Init.Prescaler = 83;
   htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim3.Init.Period = 65535;
+  htim3.Init.Period = 999;
   htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
