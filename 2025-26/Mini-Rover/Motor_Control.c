@@ -25,7 +25,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
-#include <ctype.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
