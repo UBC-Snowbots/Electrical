@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <ctype.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -34,6 +35,15 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+
+//Motor Indeces
+#define Front_Left 0
+#define Mid_Left 1
+#define Back_Left 2
+
+#define Front_Right 3
+#define Mid_Right 4
+#define Back_Right 5
 
 /* USER CODE END PD */
 
@@ -52,7 +62,8 @@ UART_HandleTypeDef huart2;
 char rx_char;
 char rx_buffer[64];        // Holds the command string
 uint8_t rx_index = 0;
-uint8_t msg_ready = 0;
+volatile uint8_t msg_ready = 0;
+char main_buffer[64];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -105,148 +116,39 @@ int main(void)
   MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
   HAL_UART_Receive_IT(&huart2, (uint8_t *)&rx_char, 1);
+
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);
+  HAL_CTRL_TIM_MOE_ENABLE(&htim1);
   /* USER CODE END 2 */
 
   /* Infinite loop */
-  /* USER CODE BEGIN WHILE */
+/* USER CODE BEGIN WHILE */
   while (1)
   {
-    /* USER CODE END WHILE */
+    if (msg_ready) {
+      // Disable interrupts for a second
+      __disable_irq(); 
+      
+      // Copy the ISR buffer into the processing buffer
+      strncpy(main_buffer, rx_buffer, 64);
+      main_buffer[63] = '\0';
+      // Reset the flag so the ISR can fill the rx_buffer again
+      msg_ready = 0; 
+      
+      // Re-enable interrupts
+      __enable_irq(); 
 
+      // Process the command 
+      serial_processing(main_buffer); 
+    }
     /* USER CODE BEGIN 3 */
   }
-
-  void update_motor (int index, int speed){
-	  uint16_t is_backwards = (speed < 0); //Check for negative speed command
-	  uint32_t magnitude = abs(speed);
-	  uint8_t motor_id = index;
-
-	  // Duty Cycle = CRR / (ARR + 1)
-	  //CRR = magnitude * (ARR + 1) / 100
-	  //ARR set to 999 for 1kHz PWM frequency. Can be adjusted to avoid jerking.
-
-	  uint16_t crr = magnitude * 10;
-
-	  switch (motor_id) {
-	  	  //Left side (0-2): timer 1
-
-		  case 0: //Front Left
-			  HAL_GPIO_WritePin (GPIOC, GPIO_PIN_0, is_backwards ? 0 : 1);
-			  HAL_GPIO_WritePin (GPIOC, GPIO_PIN_1, is_backwards ? 1 : 0);
-			  HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, ccr);
-			  break;
-
-		  case 1: //Mid Left
-			  HAL_GPIO_WritePin (GPIOC, GPIO_PIN_2, is_backwards ? 0 : 1);
-			  HAL_GPIO_WritePin (GPIOC, GPIO_PIN_3, is_backwards ? 1 : 0);
-			  HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, ccr);
-			  break;
-
-		  case 2: //Back Left
-			  HAL_GPIO_WritePin (GPIOC, GPIO_PIN_4, is_backwards ? 0 : 1);
-			  HAL_GPIO_WritePin (GPIOC, GPIO_PIN_5, is_backwards ? 1 : 0);
-			  HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, ccr);
-			  break;
-
-		  //Right side (3-5): timer 3
-
-		  case 3: //Front Right
-			  HAL_GPIO_WritePin (GPIOC, GPIO_PIN_6, is_backwards ? 0 : 1);
-			  HAL_GPIO_WritePin (GPIOC, GPIO_PIN_7, is_backwards ? 1 : 0);
-			  HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, ccr);
-			  break;
-
-		  case 4: //Mid Right
-			  HAL_GPIO_WritePin (GPIOC, GPIO_PIN_8, is_backwards ? 0 : 1);
-			  HAL_GPIO_WritePin (GPIOC, GPIO_PIN_9, is_backwards ? 1 : 0);
-			  HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, ccr);
-			  break;
-
-		  case 5: // Back Right
-			  HAL_GPIO_WritePin (GPIOC, GPIO_PIN_10, is_backwards ? 0 : 1);
-			  HAL_GPIO_WritePin (GPIOC, GPIO_PIN_11, is_backwards ? 1 : 0);
-			  HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, ccr);
-			  break;
-	  }
-  }
-
-  void serial_processing (char *buffer){
-	  //Example command: $set_speed(3,76)\n\r\0
-	  //Set motor 3 to 76%
-
-	  //Check start character
-	  if (buffer[0] != '$') return;
-
-	  if (strstr(*buffer, "set_speed")){
-
-		  //Find the indices of the start and end of each command
-		  char *cmd_start = strchr(buffer, '(');
-		  char *cmd_end = strchr(buffer, ')');
-
-		  if (data_start && data_end){
-			  //Replace end bracket with null terminator to use string.h functions
-			  *cmd_end = '\0';
-
-			  char motor_id_cmd = strtok(cmd_start + 1, ','); //Get motor id from command
-			  char motor_speed_cmd = strtok(NULL, ','); //Get speed setting from command
-
-			  if (!motor_id_cmd || !motor_speed_cmd) return;
-
-			  if(motor_id_cmd  && motor_speed_cmd){
-				  int speed = atoi(motor_speed_cmd); //Handle '-' sign from motor speed command
-				  if (speed > 100 || speed < -100) return; //Handle invalid speeds
-
-				  switch(motor_id_cmd[0])
-
-				  case 'L': //Left side
-					  for (int i = 0; i < 3; i++){
-						  update_motor(i, speed);
-					  }
-					  break;
-
-				  case 'R': //Right side
-					  for(int i = 3; i < 6; i++){
-						  update_motor(i, speed);
-					  }
-					  break;
-
-				  case 'A': //All motors
-					  for ( int i = 0; i < 6; i++){
-						  update_motor(i, speed);
-					  }
-					  break;
-
-				  default: //Individual motor 0 - 5
-					  int motor_id = atoi(motor_id_cmd);
-					  if (motor_id > 5 || motor_id < 0) return; //Reject invalid Motor IDs
-					  else{
-						  update_motor(motor_id, speed);
-					  }
-					  break;
-			  }
-		  }
-	  }
-  }
-
-  void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
-      if (huart->Instance == USART2) {
-          // Look for the end of the message (\n or \r)
-          if (rx_char == '\n' || rx_char == '\r') {
-              rx_buffer[rx_index] = '\0'; // Properly terminate the string
-              msg_ready = 1;              // Signal the main loop to parse
-              rx_index = 0;               // Reset for the next message
-          }
-          else if (rx_index < 63) {
-              rx_buffer[rx_index++] = rx_char; // Add char to buffer
-          }
-
-          // Enable the interrupt again to receive the next character
-          HAL_UART_Receive_IT(&huart2, (uint8_t *)&rx_char, 1);
-      }
-  }
-  /* USER CODE END 3 */
 }
-
 /**
   * @brief System Clock Configuration
   * @retval None
@@ -533,7 +435,134 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+  void update_motor (int index, int speed){
+	  uint16_t is_backwards = (speed < 0); //Check for negative speed command
+	  uint32_t magnitude = abs(speed);
+	  uint8_t motor_id = index;
 
+	  // Duty Cycle = CRR / (ARR + 1)
+	  //CRR = magnitude * (ARR + 1) / 100
+	  //ARR set to 999 for 1kHz PWM frequency. Can be adjusted to avoid jerking.
+
+	  uint16_t crr = magnitude * 10;
+
+	  switch (motor_id) {
+	  	  //Left side (0-2): timer 1
+
+		  case Front_Left:
+			  HAL_GPIO_WritePin (GPIOC, M0_F_Pin, is_backwards ? 0 : 1);
+			  HAL_GPIO_WritePin (GPIOC, M0_B_Pin, is_backwards ? 1 : 0);
+			  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, crr);
+			  break;
+
+		  case Mid_Left:
+			  HAL_GPIO_WritePin (GPIOC, M1_F_Pin, is_backwards ? 0 : 1);
+			  HAL_GPIO_WritePin (GPIOC, M1_B_Pin, is_backwards ? 1 : 0);
+			  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, crr);
+			  break;
+
+		  case Back_Left:
+			  HAL_GPIO_WritePin (GPIOC, M2_F_Pin, is_backwards ? 0 : 1);
+			  HAL_GPIO_WritePin (GPIOC, M2_B_Pin, is_backwards ? 1 : 0);
+			  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, crr);
+			  break;
+
+		  case Front_Right:
+			  HAL_GPIO_WritePin (GPIOC, M3_F_Pin, is_backwards ? 0 : 1);
+			  HAL_GPIO_WritePin (GPIOC, M3_B_Pin, is_backwards ? 1 : 0);
+			  __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, crr);
+			  break;
+
+		  case Mid_Right:
+			  HAL_GPIO_WritePin (GPIOC, M4_F_Pin, is_backwards ? 0 : 1);
+			  HAL_GPIO_WritePin (GPIOC, M4_B_Pin, is_backwards ? 1 : 0);
+			  __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, crr);
+			  break;
+
+		  case Back_Right:
+			  HAL_GPIO_WritePin (GPIOC, M5_F_Pin, is_backwards ? 0 : 1);
+			  HAL_GPIO_WritePin (GPIOC, M5_B_Pin, is_backwards ? 1 : 0);
+			  __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, crr);
+			  break;
+	  }
+  }
+
+  void serial_processing (char *buffer){
+	  //Example command: $set_speed(3,76)\n\r\0
+	  //Set motor 3 to 76%
+
+    char motor_id_cmd;
+    int speed_cmd;
+
+    if(sscanf(buffer, "$set_speed( %c , %d )", &motor_id_cmd, &speed_cmd) == 2){
+
+      if (speed_cmd > 100 || speed_cmd < -100){
+        return;
+      }
+
+      switch(motor_id_cmd){
+
+        case 'L': //Left Side
+          for (int i = 0; i < 3; i++) {
+            update_motor(i, speed_cmd);
+          }
+          break;
+
+        case 'R': //Right side
+          for(int i = 3; i < 6; i++) {
+            update_motor(i, speed_cmd);
+          }
+          break;
+
+        case 'A': //All motors
+          for ( int i = 0; i < 6; i++) {
+            update_motor(i, speed_cmd);
+          }
+          break;
+        
+        case 'S': //Emergeny stop
+          for (int i = 0; i < 6; i++) {
+          update_motor(i, 0); //Set all motors to 0
+          }
+          break;
+
+        default: //Individual motor 0 - 5
+          int motor_id = motor_id_cmd - '0';
+
+          if (motor_id <= 5 && motor_id >= 0) {
+            update_motor(motor_id, speed_cmd);
+          }
+          break;
+      }
+    }
+  }
+
+  void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
+    if (huart->Instance == USART2) {
+      // If we just finished a message but the main loop hasn't 
+      // processed it yet, we should ideally wait or use a ring buffer. 
+      // For now, we only write if msg_ready is 0 to avoid overwriting.
+
+      if (rx_char == '\n' || rx_char == '\r') {
+        if (rx_index > 0) { // Only signal if we actually got data
+          rx_buffer[rx_index] = '\0';
+          msg_ready = 1; 
+          rx_index = 0; 
+        }
+      } 
+      else {
+        if (rx_index < 63) {
+          rx_buffer[rx_index++] = rx_char;
+        } else {
+          // Buffer overflow safety: reset index if command is too long
+          rx_index = 0;
+        }
+      }
+
+        // Restart interrupt-driven reception
+        HAL_UART_Receive_IT(&huart2, (uint8_t *)&rx_char, 1);
+    }
+}
 /* USER CODE END 4 */
 
 /**
