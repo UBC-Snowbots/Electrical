@@ -36,7 +36,7 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
-//Motor Indeces
+//Motor Indices
 #define Front_Left 0
 #define Mid_Left 1
 #define Back_Left 2
@@ -60,8 +60,8 @@ UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
 char rx_char;
-char rx_buffer[64];        // Holds the command string
-uint8_t rx_index = 0;
+volatile char rx_buffer[64];        // Holds the command string
+volatile uint8_t rx_index = 0;
 volatile uint8_t msg_ready = 0;
 char main_buffer[64];
 /* USER CODE END PV */
@@ -123,32 +123,38 @@ int main(void)
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);
-  HAL_CTRL_TIM_MOE_ENABLE(&htim1);
+  __HAL_TIM_MOE_ENABLE(&htim1);
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
-/* USER CODE BEGIN WHILE */
+  /* USER CODE BEGIN WHILE */
   while (1)
   {
-    if (msg_ready) {
-      // Disable interrupts for a second
-      __disable_irq(); 
-      
-      // Copy the ISR buffer into the processing buffer
-      strncpy(main_buffer, rx_buffer, 64);
-      main_buffer[63] = '\0';
-      // Reset the flag so the ISR can fill the rx_buffer again
-      msg_ready = 0; 
-      
-      // Re-enable interrupts
-      __enable_irq(); 
+	  if (msg_ready)
+	  	  	      {
 
-      // Process the command 
-      serial_processing(main_buffer); 
-    }
+	  	  	          // Copy the volatile buffer to a local buffer for safe processing
+	  	  	          __disable_irq(); // Disable interrupts briefly to avoid corruption
+	  	  	          strncpy(main_buffer, (char*)rx_buffer, 64);
+	  	  	          memset((void*)rx_buffer, 0, sizeof(rx_buffer));
+
+	  	  	          msg_ready = 0;
+	  	  	          __enable_irq();
+
+	  	  	          // Process the command
+	  	  	          serial_processing(main_buffer);
+	  	  	          memset(main_buffer, 0, sizeof(main_buffer));
+	  	  	      }
+    /* USER CODE END WHILE */
+
+
     /* USER CODE BEGIN 3 */
+	  
   }
+  /* USER CODE END 3 */
 }
+
 /**
   * @brief System Clock Configuration
   * @retval None
@@ -398,9 +404,9 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOC, M0_F_Pin|M0_B_Pin|M1_F_Pin|M1_B_Pin
-                          |M2_F_Pin|M2_B_Pin|M3_F_Pin|M3_B_Pin
-                          |M4_F_Pin|M4_B_Pin|M5_F_Pin|M5_B_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOC, M0_Fwd_Pin|M0_Back_Pin|M1_Fwd_Pin|M1_Back_Pin
+                          |M2_Fwd_Pin|M2_Back_Pin|M3_Fwd_Pin|M3_Back_Pin
+                          |M4_Fwd_Pin|M4_Back_Pin|M5_Fwd_Pin|M5_Back_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
@@ -411,16 +417,22 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : M0_F_Pin M0_B_Pin M1_F_Pin M1_B_Pin
-                           M2_F_Pin M2_B_Pin M3_F_Pin M3_B_Pin
-                           M4_F_Pin M4_B_Pin M5_F_Pin M5_B_Pin */
-  GPIO_InitStruct.Pin = M0_F_Pin|M0_B_Pin|M1_F_Pin|M1_B_Pin
-                          |M2_F_Pin|M2_B_Pin|M3_F_Pin|M3_B_Pin
-                          |M4_F_Pin|M4_B_Pin|M5_F_Pin|M5_B_Pin;
+  /*Configure GPIO pins : M0_Fwd_Pin M0_Back_Pin M1_Fwd_Pin M1_Back_Pin
+                           M2_Fwd_Pin M2_Back_Pin M3_Fwd_Pin M3_Back_Pin
+                           M4_Fwd_Pin M4_Back_Pin M5_Fwd_Pin M5_Back_Pin */
+  GPIO_InitStruct.Pin = M0_Fwd_Pin|M0_Back_Pin|M1_Fwd_Pin|M1_Back_Pin
+                          |M2_Fwd_Pin|M2_Back_Pin|M3_Fwd_Pin|M3_Back_Pin
+                          |M4_Fwd_Pin|M4_Back_Pin|M5_Fwd_Pin|M5_Back_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : M0_Encoder_Pin M1_Encoder_Pin M4_Encoder_Pin M5_Encoder_Pin */
+  GPIO_InitStruct.Pin = M0_Encoder_Pin|M1_Encoder_Pin|M4_Encoder_Pin|M5_Encoder_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /*Configure GPIO pin : LD2_Pin */
   GPIO_InitStruct.Pin = LD2_Pin;
@@ -428,6 +440,20 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : M2_Encoder_Pin M3_Encoder_Pin */
+  GPIO_InitStruct.Pin = M2_Encoder_Pin|M3_Encoder_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : M0_EXTI_Pin M1_EXTI_Pin M2_EXTI_Pin M3_EXTI_Pin
+                           M4_EXTI_Pin M5_EXTI_Pin */
+  GPIO_InitStruct.Pin = M0_EXTI_Pin|M1_EXTI_Pin|M2_EXTI_Pin|M3_EXTI_Pin
+                          |M4_EXTI_Pin|M5_EXTI_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
@@ -450,38 +476,38 @@ static void MX_GPIO_Init(void)
 	  	  //Left side (0-2): timer 1
 
 		  case Front_Left:
-			  HAL_GPIO_WritePin (GPIOC, M0_F_Pin, is_backwards ? 0 : 1);
-			  HAL_GPIO_WritePin (GPIOC, M0_B_Pin, is_backwards ? 1 : 0);
+			  HAL_GPIO_WritePin (GPIOC, M0_Fwd_Pin, (speed == 0) ? 0 : is_backwards ? 0 : 1);
+			  HAL_GPIO_WritePin (GPIOC, M0_Back_Pin, (speed == 0) ? 0 : is_backwards ? 1 : 0);
 			  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, crr);
 			  break;
 
 		  case Mid_Left:
-			  HAL_GPIO_WritePin (GPIOC, M1_F_Pin, is_backwards ? 0 : 1);
-			  HAL_GPIO_WritePin (GPIOC, M1_B_Pin, is_backwards ? 1 : 0);
+			  HAL_GPIO_WritePin (GPIOC, M1_Fwd_Pin, (speed == 0) ? 0 : is_backwards ? 0 : 1);
+			  HAL_GPIO_WritePin (GPIOC, M1_Back_Pin, (speed == 0) ? 0 : is_backwards ? 1 : 0);
 			  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, crr);
 			  break;
 
 		  case Back_Left:
-			  HAL_GPIO_WritePin (GPIOC, M2_F_Pin, is_backwards ? 0 : 1);
-			  HAL_GPIO_WritePin (GPIOC, M2_B_Pin, is_backwards ? 1 : 0);
+			  HAL_GPIO_WritePin (GPIOC, M2_Fwd_Pin, (speed == 0) ? 0 : is_backwards ? 0 : 1);
+			  HAL_GPIO_WritePin (GPIOC, M2_Back_Pin, (speed == 0) ? 0 : is_backwards ? 1 : 0);
 			  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, crr);
 			  break;
 
 		  case Front_Right:
-			  HAL_GPIO_WritePin (GPIOC, M3_F_Pin, is_backwards ? 0 : 1);
-			  HAL_GPIO_WritePin (GPIOC, M3_B_Pin, is_backwards ? 1 : 0);
+			  HAL_GPIO_WritePin (GPIOC, M3_Fwd_Pin, (speed == 0) ? 0 : is_backwards ? 0 : 1);
+			  HAL_GPIO_WritePin (GPIOC, M3_Back_Pin, (speed == 0) ? 0 : is_backwards ? 1 : 0);
 			  __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, crr);
 			  break;
 
 		  case Mid_Right:
-			  HAL_GPIO_WritePin (GPIOC, M4_F_Pin, is_backwards ? 0 : 1);
-			  HAL_GPIO_WritePin (GPIOC, M4_B_Pin, is_backwards ? 1 : 0);
+			  HAL_GPIO_WritePin (GPIOC, M4_Fwd_Pin, (speed == 0) ? 0 : is_backwards ? 0 : 1);
+			  HAL_GPIO_WritePin (GPIOC, M4_Back_Pin, (speed == 0) ? 0 : is_backwards ? 1 : 0);
 			  __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, crr);
 			  break;
 
 		  case Back_Right:
-			  HAL_GPIO_WritePin (GPIOC, M5_F_Pin, is_backwards ? 0 : 1);
-			  HAL_GPIO_WritePin (GPIOC, M5_B_Pin, is_backwards ? 1 : 0);
+			  HAL_GPIO_WritePin (GPIOC, M5_Fwd_Pin, (speed == 0) ? 0 : is_backwards ? 0 : 1);
+			  HAL_GPIO_WritePin (GPIOC, M5_Back_Pin, (speed == 0) ? 0 : is_backwards ? 1 : 0);
 			  __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, crr);
 			  break;
 	  }
@@ -494,75 +520,79 @@ static void MX_GPIO_Init(void)
     char motor_id_cmd;
     int speed_cmd;
 
-    if(sscanf(buffer, "$set_speed( %c , %d )", &motor_id_cmd, &speed_cmd) == 2){
+    char *ptr = strstr(buffer, "$set_speed");
 
-      if (speed_cmd > 100 || speed_cmd < -100){
-        return;
-      }
+    if (ptr != NULL){
+		if(sscanf(ptr, "$set_speed( %c , %d )", &motor_id_cmd, &speed_cmd) == 2){
 
-      switch(motor_id_cmd){
+		  if (speed_cmd > 100 || speed_cmd < -100){
+			return;
+		  }
 
-        case 'L': //Left Side
-          for (int i = 0; i < 3; i++) {
-            update_motor(i, speed_cmd);
-          }
-          break;
+		  switch(motor_id_cmd){
 
-        case 'R': //Right side
-          for(int i = 3; i < 6; i++) {
-            update_motor(i, speed_cmd);
-          }
-          break;
+			case 'L': //Left Side
+			  for (int i = 0; i < 3; i++) {
+				update_motor(i, speed_cmd);
+			  }
+			  break;
 
-        case 'A': //All motors
-          for ( int i = 0; i < 6; i++) {
-            update_motor(i, speed_cmd);
-          }
-          break;
-        
-        case 'S': //Emergeny stop
-          for (int i = 0; i < 6; i++) {
-          update_motor(i, 0); //Set all motors to 0
-          }
-          break;
+			case 'R': //Right side
+			  for(int i = 3; i < 6; i++) {
+				update_motor(i, speed_cmd);
+			  }
+			  break;
 
-        default: //Individual motor 0 - 5
-          int motor_id = motor_id_cmd - '0';
+			case 'A': //All motors
+			  for ( int i = 0; i < 6; i++) {
+				update_motor(i, speed_cmd);
+			  }
+			  break;
 
-          if (motor_id <= 5 && motor_id >= 0) {
-            update_motor(motor_id, speed_cmd);
-          }
-          break;
-      }
+			case 'S': //Emergency stop
+			  for (int i = 0; i < 6; i++) {
+			  update_motor(i, 0); //Set all motors to 0
+			  }
+			  break;
+
+			default: //Individual motor 0 - 5
+			  int motor_id = motor_id_cmd - '0';
+
+			  if (motor_id <= 5 && motor_id >= 0) {
+				update_motor(motor_id, speed_cmd);
+			  }
+			  break;
+		  }
+		}
     }
   }
 
   void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
-    if (huart->Instance == USART2) {
-      // If we just finished a message but the main loop hasn't 
-      // processed it yet, we should ideally wait or use a ring buffer. 
-      // For now, we only write if msg_ready is 0 to avoid overwriting.
+	  if (huart->Instance == USART2) {
+		  HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5); //check if data is being processed
 
-      if (rx_char == '\n' || rx_char == '\r') {
-        if (rx_index > 0) { // Only signal if we actually got data
-          rx_buffer[rx_index] = '\0';
-          msg_ready = 1; 
-          rx_index = 0; 
-        }
-      } 
-      else {
-        if (rx_index < 63) {
-          rx_buffer[rx_index++] = rx_char;
-        } else {
-          // Buffer overflow safety: reset index if command is too long
-          rx_index = 0;
-        }
-      }
-
-        // Restart interrupt-driven reception
-        HAL_UART_Receive_IT(&huart2, (uint8_t *)&rx_char, 1);
-    }
-}
+		  if (!msg_ready) {
+			  if (rx_char == '\n' || rx_char == '\r') {
+				  if (rx_index > 0) {
+					  rx_buffer[rx_index] = '\0';
+					  msg_ready = 1;
+					  rx_index = 0;
+				  }
+			  }
+			  // ADD THIS BLOCK to handle backspaces
+			  else if (rx_char == '\b' || rx_char == 0x7F) {
+				  if (rx_index > 0) {
+					  rx_index--; // Step back one character in the buffer
+				  }
+			  }
+			  else if (rx_index < 63) {
+				  rx_buffer[rx_index++] = rx_char;
+			  }
+		  }
+		  // Always restart reception to prevent Overrun Error (ORE)
+		  HAL_UART_Receive_IT(&huart2, (uint8_t *)&rx_char, 1);
+	  }
+	}
 /* USER CODE END 4 */
 
 /**
