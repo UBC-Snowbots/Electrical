@@ -131,26 +131,33 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+
+	  HAL_GPIO_WritePin (GPIOC, M0_Fwd_Pin, 1);
+	  HAL_GPIO_WritePin (GPIOC, M0_Back_Pin, 0);
+	  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 300);
+
 	  if (msg_ready)
-	  	  	      {
+		  {
+		  	  __disable_irq(); // Disable interrupts briefly to avoid corruption
+			  strncpy(main_buffer, (char*)rx_buffer, 64);
+			  memset((void*)rx_buffer, 0, sizeof(rx_buffer));
 
-	  	  	          // Copy the volatile buffer to a local buffer for safe processing
-	  	  	          __disable_irq(); // Disable interrupts briefly to avoid corruption
-	  	  	          strncpy(main_buffer, (char*)rx_buffer, 64);
-	  	  	          memset((void*)rx_buffer, 0, sizeof(rx_buffer));
+			  msg_ready = 0;
+			  __enable_irq();
 
-	  	  	          msg_ready = 0;
-	  	  	          __enable_irq();
+			  char debug_msg[80];
+			  sprintf(debug_msg, "\r\nSTM32 Received: '%s'\r\n", main_buffer);
+			  HAL_UART_Transmit(&huart2, (uint8_t*)debug_msg, strlen(debug_msg), HAL_MAX_DELAY);
 
-	  	  	          // Process the command
-	  	  	          serial_processing(main_buffer);
-	  	  	          memset(main_buffer, 0, sizeof(main_buffer));
-	  	  	      }
+			  // Process the command
+			  serial_processing(main_buffer);
+			  memset(main_buffer, 0, sizeof(main_buffer));
+		  }
     /* USER CODE END WHILE */
 
 
     /* USER CODE BEGIN 3 */
-	  
+
   }
   /* USER CODE END 3 */
 }
@@ -525,6 +532,11 @@ static void MX_GPIO_Init(void)
     if (ptr != NULL){
 		if(sscanf(ptr, "$set_speed( %c , %d )", &motor_id_cmd, &speed_cmd) == 2){
 
+			HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5); //check if data is being processed
+
+			char debug_msg[80];
+			sprintf(debug_msg, "\r\nMotor Command: Motor %c, Speed %d\r\n", motor_id_cmd, speed_cmd);
+
 		  if (speed_cmd > 100 || speed_cmd < -100){
 			return;
 		  }
@@ -569,7 +581,6 @@ static void MX_GPIO_Init(void)
 
   void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 	  if (huart->Instance == USART2) {
-		  HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5); //check if data is being processed
 
 		  if (!msg_ready) {
 			  if (rx_char == '\n' || rx_char == '\r') {
@@ -579,7 +590,7 @@ static void MX_GPIO_Init(void)
 					  rx_index = 0;
 				  }
 			  }
-			  // ADD THIS BLOCK to handle backspaces
+
 			  else if (rx_char == '\b' || rx_char == 0x7F) {
 				  if (rx_index > 0) {
 					  rx_index--; // Step back one character in the buffer
@@ -589,10 +600,17 @@ static void MX_GPIO_Init(void)
 				  rx_buffer[rx_index++] = rx_char;
 			  }
 		  }
-		  // Always restart reception to prevent Overrun Error (ORE)
 		  HAL_UART_Receive_IT(&huart2, (uint8_t *)&rx_char, 1);
 	  }
 	}
+
+  void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
+      if (huart->Instance == USART2) {
+          // Clear the error flags and restart reception so the board doesn't lock up
+          __HAL_UART_CLEAR_OREFLAG(huart);
+          HAL_UART_Receive_IT(&huart2, (uint8_t *)&rx_char, 1);
+      }
+  }
 /* USER CODE END 4 */
 
 /**
