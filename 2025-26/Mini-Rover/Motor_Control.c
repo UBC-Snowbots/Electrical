@@ -673,12 +673,6 @@ static void MX_GPIO_Init(void)
 			  }
 			  break;
 
-			case 'S': //Emergency stop
-			  for (int i = 0; i < 6; i++) {
-			  update_motor(i, 0); //Set all motors to 0
-			  }
-			  break;
-
 			default: //Individual motor 0 - 5
 			  int motor_id = motor_id_cmd - '0';
 
