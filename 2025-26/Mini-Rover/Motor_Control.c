@@ -30,7 +30,11 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-
+typedef enum {
+    RPM_IDLE,
+    RPM_MEASURING,
+    RPM_READY
+} RPM_State;
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -44,6 +48,8 @@
 #define Front_Right 3
 #define Mid_Right 4
 #define Back_Right 5
+
+#define ENCODER_PPR 1200
 
 /* USER CODE END PD */
 
@@ -64,6 +70,16 @@ volatile char rx_buffer[64];        // Holds the command string
 volatile uint8_t rx_index = 0;
 volatile uint8_t msg_ready = 0;
 char main_buffer[64];
+
+volatile int8_t motor_direction[6] = {0};
+volatile uint32_t encoder_counts[6] = {0};
+uint32_t last_speed_calc_tick[6] = {0};
+double motor_rpm[6] = {0};
+
+RPM_State rpm_state = RPM_IDLE;
+int rpm_pending_motor = -1;
+uint32_t rpm_window_start = 0;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -75,6 +91,7 @@ static void MX_TIM3_Init(void);
 /* USER CODE BEGIN PFP */
 void update_motor (int index, int speed); //Updates the speed and direction of each motor
 void serial_processing (char *buffer); //Parses serial commands to extract speed and direction
+void calculate_rpm(int motor_id);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -132,20 +149,13 @@ int main(void)
   while (1)
   {
 
-	  HAL_GPIO_WritePin (GPIOC, M0_Fwd_Pin, 1);
-	  HAL_GPIO_WritePin (GPIOC, M0_Back_Pin, 0);
-	  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 300);
-
 	  if (msg_ready)
 		  {
-		  	  __disable_irq(); // Disable interrupts briefly to avoid corruption
-			  strncpy(main_buffer, (char*)rx_buffer, 64);
+		  	  strncpy(main_buffer, (char*)rx_buffer, 64);
 			  memset((void*)rx_buffer, 0, sizeof(rx_buffer));
-
 			  msg_ready = 0;
-			  __enable_irq();
 
-			  char debug_msg[80];
+			  char debug_msg[100];
 			  sprintf(debug_msg, "\r\nSTM32 Received: '%s'\r\n", main_buffer);
 			  HAL_UART_Transmit(&huart2, (uint8_t*)debug_msg, strlen(debug_msg), HAL_MAX_DELAY);
 
@@ -153,8 +163,29 @@ int main(void)
 			  serial_processing(main_buffer);
 			  memset(main_buffer, 0, sizeof(main_buffer));
 		  }
-    /* USER CODE END WHILE */
 
+	    if (rpm_state == RPM_MEASURING){
+	        if ((HAL_GetTick() - rpm_window_start) >= 100){
+	            // 100ms has elapsed, calculate and report
+	            calculate_rpm(rpm_pending_motor);
+
+	            const char *dir;
+	            if      (motor_direction[rpm_pending_motor] ==  1) dir = "Forward";
+	            else if (motor_direction[rpm_pending_motor] == -1) dir = "Backward";
+	            else                                               dir = "Stopped";
+
+	            char reply[80];
+	            sprintf(reply, "\r\nMotor %d: %.1f RPM [%s]\r\n",
+	                    rpm_pending_motor,
+	                    (float)motor_rpm[rpm_pending_motor],
+	                    dir);
+	            HAL_UART_Transmit(&huart2, (uint8_t*)reply, strlen(reply), HAL_MAX_DELAY);
+
+	            rpm_state = RPM_IDLE;
+	            rpm_pending_motor = -1;
+	        }
+	    }
+    /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
 
@@ -435,12 +466,6 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : M0_Encoder_Pin M1_Encoder_Pin M4_Encoder_Pin M5_Encoder_Pin */
-  GPIO_InitStruct.Pin = M0_Encoder_Pin|M1_Encoder_Pin|M4_Encoder_Pin|M5_Encoder_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
   /*Configure GPIO pin : LD2_Pin */
   GPIO_InitStruct.Pin = LD2_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
@@ -448,8 +473,10 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : M2_Encoder_Pin M3_Encoder_Pin */
-  GPIO_InitStruct.Pin = M2_Encoder_Pin|M3_Encoder_Pin;
+  /*Configure GPIO pins : M0_Phase_B_Pin M1_Phase_B_Pin M2_Phase_B_Pin M3_Phase_B_Pin
+                           M4_Phase_B_Pin M5_Phase_B_Pin */
+  GPIO_InitStruct.Pin = M0_Phase_B_Pin|M1_Phase_B_Pin|M2_Phase_B_Pin|M3_Phase_B_Pin
+                          |M4_Phase_B_Pin|M5_Phase_B_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
@@ -463,15 +490,18 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
+  HAL_NVIC_SetPriority(EXTI4_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI4_IRQn);
 
+  HAL_NVIC_SetPriority(EXTI9_5_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
   /* USER CODE END MX_GPIO_Init_2 */
 }
 
 /* USER CODE BEGIN 4 */
-  void update_motor (int index, int speed){
+  void update_motor (int motor_id, int speed){
 	  uint16_t is_backwards = (speed < 0); //Check for negative speed command
 	  uint32_t magnitude = abs(speed);
-	  uint8_t motor_id = index;
 
 	  // Duty Cycle = CRR / (ARR + 1)
 	  //CRR = magnitude * (ARR + 1) / 100
@@ -483,44 +513,130 @@ static void MX_GPIO_Init(void)
 	  	  //Left side (0-2): timer 1
 
 		  case Front_Left:
-			  HAL_GPIO_WritePin (GPIOC, M0_Fwd_Pin, (speed == 0) ? 0 : is_backwards ? 0 : 1);
-			  HAL_GPIO_WritePin (GPIOC, M0_Back_Pin, (speed == 0) ? 0 : is_backwards ? 1 : 0);
-			  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, crr);
+
+			  if (speed == 0){
+				  HAL_GPIO_WritePin (GPIOC, M0_Fwd_Pin, 0);
+				  HAL_GPIO_WritePin (GPIOC, M0_Back_Pin, 0);
+				  motor_direction[Front_Left] = 0;
+			  }
+			  else if (!is_backwards){
+				  HAL_GPIO_WritePin (GPIOC, M0_Fwd_Pin, 1);
+				  HAL_GPIO_WritePin (GPIOC, M0_Back_Pin, 0);
+				  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, crr);
+				  motor_direction[Front_Left] = 1;
+			  }
+			  else{
+				  HAL_GPIO_WritePin (GPIOC, M0_Fwd_Pin, 0);
+				  HAL_GPIO_WritePin (GPIOC, M0_Back_Pin, 1);
+				  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, crr);
+				  motor_direction[Front_Left] = -1;
+			  }
+
 			  break;
 
 		  case Mid_Left:
-			  HAL_GPIO_WritePin (GPIOC, M1_Fwd_Pin, (speed == 0) ? 0 : is_backwards ? 0 : 1);
-			  HAL_GPIO_WritePin (GPIOC, M1_Back_Pin, (speed == 0) ? 0 : is_backwards ? 1 : 0);
-			  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, crr);
+			  if (speed == 0){
+				  HAL_GPIO_WritePin (GPIOC, M1_Fwd_Pin, 0);
+				  HAL_GPIO_WritePin (GPIOC, M1_Back_Pin, 0);
+				  motor_direction[Mid_Left] = 0;
+			  }
+			  else if (!is_backwards){
+				  HAL_GPIO_WritePin (GPIOC, M1_Fwd_Pin, 1);
+				  HAL_GPIO_WritePin (GPIOC, M1_Back_Pin, 0);
+				  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, crr);
+				  motor_direction[Mid_Left] = 1;
+			  }
+			  else{
+				  HAL_GPIO_WritePin (GPIOC, M1_Fwd_Pin, 0);
+				  HAL_GPIO_WritePin (GPIOC, M1_Back_Pin, 1);
+				  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, crr);
+				  motor_direction[Mid_Left] = -1;
+			  }
 			  break;
 
 		  case Back_Left:
-			  HAL_GPIO_WritePin (GPIOC, M2_Fwd_Pin, (speed == 0) ? 0 : is_backwards ? 0 : 1);
-			  HAL_GPIO_WritePin (GPIOC, M2_Back_Pin, (speed == 0) ? 0 : is_backwards ? 1 : 0);
-			  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, crr);
+			  if (speed == 0){
+				  HAL_GPIO_WritePin (GPIOC, M2_Fwd_Pin, 0);
+				  HAL_GPIO_WritePin (GPIOC, M2_Back_Pin, 0);
+				  motor_direction[Back_Left] = 0;
+			  }
+			  else if (!is_backwards){
+				  HAL_GPIO_WritePin (GPIOC, M2_Fwd_Pin, 1);
+				  HAL_GPIO_WritePin (GPIOC, M2_Back_Pin, 0);
+				  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, crr);
+				  motor_direction[Back_Left] = 1;
+			  }
+			  else{
+				  HAL_GPIO_WritePin (GPIOC, M2_Fwd_Pin, 0);
+				  HAL_GPIO_WritePin (GPIOC, M2_Back_Pin, 1);
+				  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, crr);
+				  motor_direction[Back_Left] = -1;
+			  }
 			  break;
 
 		  case Front_Right:
-			  HAL_GPIO_WritePin (GPIOC, M3_Fwd_Pin, (speed == 0) ? 0 : is_backwards ? 0 : 1);
-			  HAL_GPIO_WritePin (GPIOC, M3_Back_Pin, (speed == 0) ? 0 : is_backwards ? 1 : 0);
-			  __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, crr);
+			  if (speed == 0){
+				  HAL_GPIO_WritePin (GPIOC, M3_Fwd_Pin, 0);
+				  HAL_GPIO_WritePin (GPIOC, M3_Back_Pin, 0);
+				  motor_direction[Front_Right] = 0;
+			  }
+			  else if (!is_backwards){
+				  HAL_GPIO_WritePin (GPIOC, M3_Fwd_Pin, 1);
+				  HAL_GPIO_WritePin (GPIOC, M3_Back_Pin, 0);
+				  __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, crr);
+				  motor_direction[Front_Right] = 1;
+			  }
+			  else{
+				  HAL_GPIO_WritePin (GPIOC, M3_Fwd_Pin, 0);
+				  HAL_GPIO_WritePin (GPIOC, M3_Back_Pin, 1);
+				  __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, crr);
+				  motor_direction[Front_Right] = -1;
+			  }
 			  break;
 
 		  case Mid_Right:
-			  HAL_GPIO_WritePin (GPIOC, M4_Fwd_Pin, (speed == 0) ? 0 : is_backwards ? 0 : 1);
-			  HAL_GPIO_WritePin (GPIOC, M4_Back_Pin, (speed == 0) ? 0 : is_backwards ? 1 : 0);
-			  __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, crr);
+			  if (speed == 0){
+				  HAL_GPIO_WritePin (GPIOC, M4_Fwd_Pin, 0);
+				  HAL_GPIO_WritePin (GPIOC, M4_Back_Pin, 0);
+				  motor_direction[Mid_Right] = 0;
+			  }
+			  else if (!is_backwards){
+				  HAL_GPIO_WritePin (GPIOC, M4_Fwd_Pin, 1);
+				  HAL_GPIO_WritePin (GPIOC, M4_Back_Pin, 0);
+				  __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, crr);
+				  motor_direction[Mid_Right] = 1;
+			  }
+			  else{
+				  HAL_GPIO_WritePin (GPIOC, M4_Fwd_Pin, 0);
+				  HAL_GPIO_WritePin (GPIOC, M4_Back_Pin, 1);
+				  __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, crr);
+				  motor_direction[Mid_Right] = -1;
+			  }
 			  break;
 
 		  case Back_Right:
-			  HAL_GPIO_WritePin (GPIOC, M5_Fwd_Pin, (speed == 0) ? 0 : is_backwards ? 0 : 1);
-			  HAL_GPIO_WritePin (GPIOC, M5_Back_Pin, (speed == 0) ? 0 : is_backwards ? 1 : 0);
-			  __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, crr);
+			  if (speed == 0){
+				  HAL_GPIO_WritePin (GPIOC, M5_Fwd_Pin, 0);
+				  HAL_GPIO_WritePin (GPIOC, M5_Back_Pin, 0);
+				  motor_direction[Back_Right] = 0;
+			  }
+			  else if (!is_backwards){
+				  HAL_GPIO_WritePin (GPIOC, M5_Fwd_Pin, 1);
+				  HAL_GPIO_WritePin (GPIOC, M5_Back_Pin, 0);
+				  __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, crr);
+				  motor_direction[Back_Right] = 1;
+			  }
+			  else{
+				  HAL_GPIO_WritePin (GPIOC, M5_Fwd_Pin, 0);
+				  HAL_GPIO_WritePin (GPIOC, M5_Back_Pin, 1);
+				  __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, crr);
+				  motor_direction[Back_Right] = -1;
+			  }
 			  break;
 	  }
   }
 
-  void serial_processing (char *buffer){
+  void serial_processing (char *buffer) {
 	  //Example command: $set_speed(3,76)\n\r\0
 	  //Set motor 3 to 76%
 
@@ -528,14 +644,10 @@ static void MX_GPIO_Init(void)
     int speed_cmd;
 
     char *ptr = strstr(buffer, "$set_speed");
+    char *ptr2 = strstr(buffer, "$get_speed");
 
     if (ptr != NULL){
-		if(sscanf(ptr, "$set_speed( %c , %d )", &motor_id_cmd, &speed_cmd) == 2){
-
-			HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5); //check if data is being processed
-
-			char debug_msg[80];
-			sprintf(debug_msg, "\r\nMotor Command: Motor %c, Speed %d\r\n", motor_id_cmd, speed_cmd);
+		if(sscanf(ptr, "$set_speed(%c,%d)", &motor_id_cmd, &speed_cmd) == 2){
 
 		  if (speed_cmd > 100 || speed_cmd < -100){
 			return;
@@ -577,6 +689,24 @@ static void MX_GPIO_Init(void)
 		  }
 		}
     }
+
+    if (ptr2 != NULL){
+        char motor_id_cmd2;
+        if(sscanf(ptr2, "$get_speed(%c)", &motor_id_cmd2) == 1){
+            int motor_id = motor_id_cmd2 - '0';
+
+            if (motor_id >= 0 && motor_id <= 5){
+            	__disable_irq();
+            	encoder_counts[motor_id] = 0;
+            	__enable_irq();
+
+                rpm_pending_motor = motor_id;
+                rpm_window_start = HAL_GetTick();
+                last_speed_calc_tick[motor_id] = rpm_window_start;
+                rpm_state = RPM_MEASURING;
+            }
+        }
+    }
   }
 
   void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
@@ -610,6 +740,33 @@ static void MX_GPIO_Init(void)
           __HAL_UART_CLEAR_OREFLAG(huart);
           HAL_UART_Receive_IT(&huart2, (uint8_t *)&rx_char, 1);
       }
+  }
+
+  void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
+	  if (GPIO_Pin == M0_EXTI_Pin) encoder_counts[0]++;
+	  else if (GPIO_Pin == M1_EXTI_Pin) encoder_counts[1]++;
+	  else if (GPIO_Pin == M2_EXTI_Pin) encoder_counts[2]++;
+	  else if (GPIO_Pin == M3_EXTI_Pin) encoder_counts[3]++;
+	  else if (GPIO_Pin == M4_EXTI_Pin) encoder_counts[4]++;
+	  else encoder_counts[5]++;
+  }
+
+  void calculate_rpm(int motor_id) {
+      uint32_t now = HAL_GetTick(); // milliseconds
+      uint32_t elapsed_ms = now - last_speed_calc_tick[motor_id];
+
+      if (elapsed_ms == 0) return;
+
+      // Snapshot and reset count atomically
+      __disable_irq();
+      uint32_t counts = encoder_counts[motor_id];
+      encoder_counts[motor_id] = 0;
+      __enable_irq();
+
+      last_speed_calc_tick[motor_id] = now;
+
+      // RPM = (counts / PPR) / (elapsed_ms / 60000)
+      motor_rpm[motor_id] = ((double)counts / ENCODER_PPR) * (60000.0f / elapsed_ms);
   }
 /* USER CODE END 4 */
 
