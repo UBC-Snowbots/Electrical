@@ -1,0 +1,27 @@
+# ninja log v7
+112	361	8163969095381015	cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_ll_adc.c.obj	44fab90ca2316dff
+75	402	8163969095018109	CMakeFiles/PDB_18V_12V.dir/startup_stm32g030xx.s.obj	7796f58b73f48b8d
+56	423	8163969094828489	CMakeFiles/PDB_18V_12V.dir/Core/Src/sysmem.c.obj	2274a19304502d43
+41	542	8163969094605770	CMakeFiles/PDB_18V_12V.dir/Core/Src/stm32g0xx_it.c.obj	cfea553a8f05c7c3
+85	568	8163969095102749	cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Core/Src/system_stm32g0xx.c.obj	8a62463bce011e66
+49	596	8163969094758506	CMakeFiles/PDB_18V_12V.dir/Core/Src/stm32g0xx_hal_msp.c.obj	3938ff09a0b24f10
+33	637	8163969094592994	CMakeFiles/PDB_18V_12V.dir/Core/Src/main.c.obj	d2bbf13f523729dc
+103	714	8163969095299560	cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_adc_ex.c.obj	cdc493f81575fcc0
+424	728	8163969098500211	cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_ll_rcc.c.obj	80f84fa855a2e0d9
+65	739	8163969094904036	CMakeFiles/PDB_18V_12V.dir/Core/Src/syscalls.c.obj	595f6a4fdc917e77
+94	848	8163969095203804	cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_adc.c.obj	26e2f1a593010e
+414	1198	8163969098395575	cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_rcc_ex.c.obj	e8f20d8d3a7b3bd0
+373	1247	8163969098196403	cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_rcc.c.obj	a782894c548fa2d6
+581	1259	8163969100114888	cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_flash_ex.c.obj	9f96cec0bec96831
+715	1372	8163969101410520	cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_dma_ex.c.obj	78a504f589257c12
+605	1428	8163969100512568	cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_gpio.c.obj	1eaa21a8bdc2460e
+729	1430	8163969101553172	cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_pwr.c.obj	4c6b4205b68bbc0
+552	1642	8163969099790763	cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_flash.c.obj	e3e72907dd30ee29
+739	1681	8163969101649760	cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_pwr_ex.c.obj	fd873f8135b1157
+643	1683	8163969100692056	cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_dma.c.obj	73b30101bc65e9dd
+870	1766	8163969102965181	cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_cortex.c.obj	218b5eac6f758adf
+1198	1887	8163969106252613	cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal.c.obj	fb27f297d75bf4af
+1248	1932	8163969106747142	cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_exti.c.obj	78f08ebc9a39c983
+1403	2093	8163969108447339	cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_uart_ex.c.obj	f84820939c590e97
+1259	2297	8163969106853709	cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_uart.c.obj	b226c8ad5b432ef9
+2298	2524	8163969117240694	PDB_18V_12V.elf	afa53aeb1ee9fbce

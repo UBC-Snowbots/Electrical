@@ -1,0 +1,6 @@
+C:/Users/ajaym/OneDrive/Desktop/UBC/UBC Rover/Current_Sense5V/build/CMakeFiles/PDB_5V.dir
+C:/Users/ajaym/OneDrive/Desktop/UBC/UBC Rover/Current_Sense5V/build/CMakeFiles/edit_cache.dir
+C:/Users/ajaym/OneDrive/Desktop/UBC/UBC Rover/Current_Sense5V/build/CMakeFiles/rebuild_cache.dir
+C:/Users/ajaym/OneDrive/Desktop/UBC/UBC Rover/Current_Sense5V/build/cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir
+C:/Users/ajaym/OneDrive/Desktop/UBC/UBC Rover/Current_Sense5V/build/cmake/stm32cubemx/CMakeFiles/edit_cache.dir
+C:/Users/ajaym/OneDrive/Desktop/UBC/UBC Rover/Current_Sense5V/build/cmake/stm32cubemx/CMakeFiles/rebuild_cache.dir

@@ -1,0 +1,7 @@
+C:/Users/ajaym/OneDrive/Desktop/UBC/UBC Rover/Current_Sense12-18V/Core/Src/main.c:67:10:Read_ADC_Channel	40	static
+C:/Users/ajaym/OneDrive/Desktop/UBC/UBC Rover/Current_Sense12-18V/Core/Src/main.c:127:5:main	208	static
+C:/Users/ajaym/OneDrive/Desktop/UBC/UBC Rover/Current_Sense12-18V/Core/Src/main.c:223:6:SystemClock_Config	88	static
+C:/Users/ajaym/OneDrive/Desktop/UBC/UBC Rover/Current_Sense12-18V/Core/Src/main.c:264:13:MX_ADC1_Init	24	static
+C:/Users/ajaym/OneDrive/Desktop/UBC/UBC Rover/Current_Sense12-18V/Core/Src/main.c:323:13:MX_USART1_UART_Init	8	static
+C:/Users/ajaym/OneDrive/Desktop/UBC/UBC Rover/Current_Sense12-18V/Core/Src/main.c:371:13:MX_GPIO_Init	48	static
+C:/Users/ajaym/OneDrive/Desktop/UBC/UBC Rover/Current_Sense12-18V/Core/Src/main.c:411:6:Error_Handler	8	static

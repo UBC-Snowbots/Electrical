@@ -1,0 +1,8 @@
+{
+	"InstallScripts" : 
+	[
+		"C:/Users/ajaym/OneDrive/Desktop/UBC/UBC Rover/Current_Sense5V/build/cmake_install.cmake",
+		"C:/Users/ajaym/OneDrive/Desktop/UBC/UBC Rover/Current_Sense5V/build/cmake/stm32cubemx/cmake_install.cmake"
+	],
+	"Parallel" : false
+}
